@@ -1,11 +1,19 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { entryTarget } from "@/lib/auth-callback";
 
 export const Route = createFileRoute("/")({
-  head: () => ({ meta: [
-    { title: "OmniVisibility Autopilot" },
-    { name: "description", content: "Agency command center for organic search and AI visibility." },
-    { property: "og:title", content: "OmniVisibility Autopilot" },
-    { property: "og:description", content: "Agency command center for organic search and AI visibility." },
-  ] }),
-  beforeLoad: () => { throw redirect({ to: "/overview" }); },
+  ssr: false,
+  component: Entry,
 });
+
+function Entry() {
+  useEffect(() => {
+    window.location.replace(entryTarget(window.location.search, window.location.hash));
+  }, []);
+  return (
+    <main className="grid min-h-screen place-items-center text-sm text-muted-foreground">
+      Opening OmniVisibility…
+    </main>
+  );
+}

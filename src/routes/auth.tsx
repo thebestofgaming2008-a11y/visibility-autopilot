@@ -5,6 +5,7 @@ import { lovable } from "@/integrations/lovable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { isRecoveryCallback } from "@/lib/auth-callback";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -25,14 +26,26 @@ function AuthPage() {
   const [pw, setPw] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [recoveryReady, setRecoveryReady] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
   useEffect(() => {
-    if (
-      window.location.hash.includes("type=recovery") ||
-      new URLSearchParams(window.location.search).get("type") === "recovery"
-    )
-      setMode("recover");
-    const { data } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") setMode("recover");
+    const recoveryCallback = isRecoveryCallback(window.location.search, window.location.hash);
+    if (recoveryCallback) setMode("recover");
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      setHasSession(!!session);
+      if (event === "PASSWORD_RECOVERY") {
+        setMode("recover");
+        setRecoveryReady(true);
+      } else if (recoveryCallback && session) setRecoveryReady(true);
+    });
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) setMsg(error.message);
+      setHasSession(!!data.session);
+      if (recoveryCallback) {
+        setRecoveryReady(!!data.session);
+        if (!data.session && !error)
+          setMsg("This reset link could not be verified. Request a new link below.");
+      }
     });
     return () => data.subscription.unsubscribe();
   }, []);
@@ -43,10 +56,12 @@ function AuthPage() {
     try {
       if (mode === "request_reset") {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/auth`,
+          redirectTo: `${window.location.origin}/auth?recovery=1`,
         });
         setMsg(error ? error.message : "Check your email for a password reset link.");
       } else if (mode === "recover") {
+        if (!recoveryReady && !hasSession)
+          throw new Error("Reset link is not ready. Request a new link.");
         const { error } = await supabase.auth.updateUser({ password: pw });
         if (error) setMsg(error.message);
         else {
@@ -121,7 +136,10 @@ function AuthPage() {
               {msg}
             </p>
           )}
-          <Button className="w-full" disabled={busy}>
+          <Button
+            className="w-full"
+            disabled={busy || (mode === "recover" && !recoveryReady && !hasSession)}
+          >
             {busy
               ? "…"
               : mode === "in"
@@ -157,6 +175,31 @@ function AuthPage() {
             }}
           >
             Forgot password?
+          </button>
+        )}
+        {mode === "in" && hasSession && (
+          <button
+            type="button"
+            className="mt-4 block text-sm text-accent-foreground underline"
+            onClick={() => {
+              setMode("recover");
+              setRecoveryReady(true);
+              setMsg(null);
+            }}
+          >
+            Set a new password
+          </button>
+        )}
+        {mode === "recover" && !recoveryReady && !hasSession && (
+          <button
+            type="button"
+            className="mt-4 text-sm text-accent-foreground underline"
+            onClick={() => {
+              setMode("request_reset");
+              setMsg(null);
+            }}
+          >
+            Request another reset link
           </button>
         )}
         {mode !== "recover" && (
