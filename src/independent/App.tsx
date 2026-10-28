@@ -18,6 +18,7 @@ type Section = (typeof sections)[number];
 
 function AuthScreen() {
   const { signIn } = useAuthActions();
+  const capabilities = useQuery(api.capabilities.get);
   const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,6 +42,7 @@ function AuthScreen() {
       {error && <p className="error" role="alert">{error}</p>}
       <button className="primary" disabled={busy}>{busy ? "Please wait…" : flow === "signUp" ? "Create workspace" : "Sign in"}</button>
     </form>
+    {capabilities?.googleSignIn && <button style={{ width: "100%", marginTop: 12 }} onClick={() => void signIn("google").catch(reason => setError((reason as Error).message))}>Continue with Google</button>}
     <p className="notice">Dev accounts use email and password. Email verification, password reset, and Google sign in are being configured for this new stack.</p>
   </div></main>;
 }

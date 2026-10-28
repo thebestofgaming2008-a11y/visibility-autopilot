@@ -9,8 +9,14 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as capabilities from "../capabilities.js";
+import type * as crons from "../crons.js";
 import type * as http from "../http.js";
+import type * as mcpHttp from "../mcpHttp.js";
+import type * as mcpOps from "../mcpOps.js";
+import type * as mcpTokens from "../mcpTokens.js";
 import type * as publicAudit from "../publicAudit.js";
+import type * as scheduling from "../scheduling.js";
 import type * as workspace from "../workspace.js";
 
 import type {
@@ -21,8 +27,14 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  capabilities: typeof capabilities;
+  crons: typeof crons;
   http: typeof http;
+  mcpHttp: typeof mcpHttp;
+  mcpOps: typeof mcpOps;
+  mcpTokens: typeof mcpTokens;
   publicAudit: typeof publicAudit;
+  scheduling: typeof scheduling;
   workspace: typeof workspace;
 }>;
 

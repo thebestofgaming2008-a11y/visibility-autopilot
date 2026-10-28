@@ -39,6 +39,29 @@ export default defineSchema({
   })
     .index("by_workspace_id", ["workspace_id"])
     .index("by_workspace_id_and_domain", ["workspace_id", "domain"]),
+  audit_schedules: defineTable({
+    workspace_id: v.id("workspaces"),
+    site_id: v.id("sites"),
+    enabled: v.boolean(),
+    interval_hours: v.number(),
+    next_run_at: v.union(v.number(), v.null()),
+    last_run_at: v.union(v.number(), v.null()),
+    last_error: v.union(v.string(), v.null()),
+    updated_at: timestamp,
+  })
+    .index("by_site_id", ["site_id"])
+    .index("by_enabled_and_next_run_at", ["enabled", "next_run_at"]),
+  mcp_tokens: defineTable({
+    workspace_id: v.id("workspaces"),
+    user_id: v.id("users"),
+    token_hash: v.string(),
+    label: v.string(),
+    created_at: timestamp,
+    expires_at: v.number(),
+    revoked_at: nullableText,
+  })
+    .index("by_token_hash", ["token_hash"])
+    .index("by_workspace_id", ["workspace_id"]),
   audits: defineTable({
     workspace_id: v.id("workspaces"),
     site_id: v.id("sites"),

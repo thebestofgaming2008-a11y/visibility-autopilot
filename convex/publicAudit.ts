@@ -1,6 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { action, internalMutation } from "./_generated/server";
+import { action, internalAction, internalMutation, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { normalizeDomain, safeFetch } from "../src/lib/audit/ssrf";
@@ -10,7 +10,7 @@ import { evaluate, confidenceOf, impactOf, type AuditInput } from "../src/lib/au
 const now = () => new Date().toISOString();
 
 export const start = internalMutation({
-  args: { siteId: v.id("sites"), userId: v.id("users") },
+  args: { siteId: v.id("sites"), userId: v.optional(v.id("users")), workspaceId: v.optional(v.id("workspaces")) },
   returns: v.object({
     auditId: v.id("audits"),
     jobId: v.id("job_runs"),
@@ -21,13 +21,19 @@ export const start = internalMutation({
   handler: async (ctx, args) => {
     const site = await ctx.db.get(args.siteId);
     if (!site) throw new Error("Site not found");
-    const membership = await ctx.db
-      .query("memberships")
-      .withIndex("by_workspace_id_and_user_id", (q) =>
-        q.eq("workspace_id", site.workspace_id).eq("user_id", args.userId),
-      )
-      .unique();
-    if (!membership || membership.role === "viewer") throw new Error("Audit access denied");
+    if (args.workspaceId && site.workspace_id !== args.workspaceId) throw new Error("Site outside token workspace");
+    if (args.userId) {
+      const membership = await ctx.db
+        .query("memberships")
+        .withIndex("by_workspace_id_and_user_id", (q) =>
+          q.eq("workspace_id", site.workspace_id).eq("user_id", args.userId!),
+        )
+        .unique();
+      if (!membership || membership.role === "viewer") throw new Error("Audit access denied");
+    } else {
+      const schedule = await ctx.db.query("audit_schedules").withIndex("by_site_id", q => q.eq("site_id", site._id)).unique();
+      if (!schedule?.enabled) throw new Error("Scheduled audit disabled");
+    }
     const recent = await ctx.db
       .query("audits")
       .withIndex("by_site_id", (q) => q.eq("site_id", site._id))
@@ -44,7 +50,7 @@ export const start = internalMutation({
       finished_at: null,
       error: null,
       summary: {},
-      created_by: args.userId,
+      ...(args.userId ? { created_by: args.userId } : {}),
       created_at: startedAt,
     });
     const jobId = await ctx.db.insert("job_runs", {
@@ -52,12 +58,12 @@ export const start = internalMutation({
       site_id: site._id,
       kind: "public_audit",
       status: "running",
-      trigger: "manual",
+      trigger: args.userId ? "manual" : "scheduled",
       started_at: startedAt,
       finished_at: null,
       error: null,
       ref_id: auditId,
-      created_by: args.userId,
+      ...(args.userId ? { created_by: args.userId } : {}),
       created_at: startedAt,
     });
     return {
@@ -200,26 +206,19 @@ export const fail = internalMutation({
   },
 });
 
-export const run = action({
-  args: { siteId: v.id("sites") },
-  returns: v.object({ auditId: v.id("audits"), status: v.string(), summary: v.any() }),
-  handler: async (ctx, args): Promise<{
-    auditId: Id<"audits">;
-    status: string;
-    summary: Record<string, unknown>;
-  }> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Sign in required");
-    const started: {
-      auditId: Id<"audits">;
-      jobId: Id<"job_runs">;
-      workspaceId: Id<"workspaces">;
-      domain: string;
-      languages: string[];
-    } = await ctx.runMutation(internal.publicAudit.start, {
-      siteId: args.siteId,
-      userId,
-    });
+type Started = {
+  auditId: Id<"audits">;
+  jobId: Id<"job_runs">;
+  workspaceId: Id<"workspaces">;
+  domain: string;
+  languages: string[];
+};
+
+async function execute(ctx: ActionCtx, started: Started): Promise<{
+  auditId: Id<"audits">;
+  status: string;
+  summary: Record<string, unknown>;
+}> {
     try {
       const root = normalizeDomain(started.domain);
       const base = `https://${root}`;
@@ -368,5 +367,39 @@ export const run = action({
       });
       return { auditId: started.auditId, status: "failed", summary: { error: message } };
     }
+}
+
+export const run = action({
+  args: { siteId: v.id("sites") },
+  returns: v.object({ auditId: v.id("audits"), status: v.string(), summary: v.any() }),
+  handler: async (ctx, args): Promise<{ auditId: Id<"audits">; status: string; summary: Record<string, unknown> }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in required");
+    const started: Started = await ctx.runMutation(internal.publicAudit.start, { siteId: args.siteId, userId });
+    return execute(ctx, started);
+  },
+});
+
+export const runScheduled = internalAction({
+  args: { siteId: v.id("sites") },
+  returns: v.null(),
+  handler: async (ctx, { siteId }) => {
+    try {
+      const started: Started = await ctx.runMutation(internal.publicAudit.start, { siteId });
+      const result = await execute(ctx, started);
+      await ctx.runMutation(internal.scheduling.record, { siteId, error: result.status === "failed" ? String(result.summary["error"] ?? "Audit failed") : null });
+    } catch (error) {
+      await ctx.runMutation(internal.scheduling.record, { siteId, error: (error as Error).message });
+    }
+    return null;
+  },
+});
+
+export const runForMcp = internalAction({
+  args: { siteId: v.id("sites"), workspaceId: v.id("workspaces"), userId: v.id("users") },
+  returns: v.object({ auditId: v.id("audits"), status: v.string(), summary: v.any() }),
+  handler: async (ctx, args): Promise<{ auditId: Id<"audits">; status: string; summary: Record<string, unknown> }> => {
+    const started: Started = await ctx.runMutation(internal.publicAudit.start, args);
+    return execute(ctx, started);
   },
 });

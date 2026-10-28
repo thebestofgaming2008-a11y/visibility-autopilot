@@ -31,6 +31,11 @@ const [keywords, competitors, briefs, activity, workspace] = await Promise.all([
 ]);
 if (!keywords.length || !competitors.length || !briefs.length || activity.length < 4 || workspace?.autopilot_mode !== "manual")
   throw new Error("Convex content, research, mode, or activity flow failed");
+await client.mutation(api.scheduling.set, { siteId: site.id, enabled: true });
+const schedule = await client.query(api.scheduling.get, { siteId: site.id });
+if (!schedule?.enabled || !schedule.next_run_at || schedule.interval_hours !== 24)
+  throw new Error("Scheduled audit did not persist");
+await client.mutation(api.scheduling.set, { siteId: site.id, enabled: false });
 const audit = await client.action(api.publicAudit.run, { siteId: site.id });
 const audits = await client.query(api.workspace.listAudits, { siteId: site.id });
 const pages = await client.query(api.workspace.listAuditPages, { auditId: audit.auditId });
@@ -45,4 +50,4 @@ if ((await outsider.query(api.workspace.listSites, {})).some(row => row.id === s
 let denied = false;
 try { await outsider.query(api.workspace.listAudits, { siteId: site.id }); } catch { denied = true; }
 if (!denied) throw new Error("Cross-workspace audit access allowed");
-console.log(JSON.stringify({ signUp: "ok", workspace: "ok", site: site.domain, content: "ok", keywords: "ok", competitors: "ok", activity: "ok", isolation: "ok", audit: audit.status, pages: pages.length, summary: audit.summary }, null, 2));
+console.log(JSON.stringify({ signUp: "ok", workspace: "ok", site: site.domain, content: "ok", keywords: "ok", competitors: "ok", activity: "ok", isolation: "ok", scheduling: "ok", audit: audit.status, pages: pages.length, summary: audit.summary }, null, 2));

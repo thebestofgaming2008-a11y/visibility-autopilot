@@ -8,11 +8,17 @@ The active nonproduction version uses Convex for auth, tenant data and public au
 - Convex dev deployment: https://dashboard.convex.dev/t/monz/visibility-autopilot-dev/colorless-toad-83
 - Branch: `convex-cloudflare-dev` (the original Lovable version remains on `main`)
 
-The app is explicitly **development only**. Email/password signup works, but email verification, password reset and Google sign-in are not configured on the new stack. Search Console, GA4, Business Profile, email delivery, remote MCP and publishing integrations are disconnected. No private Yabi data was imported and no production site was changed. The Cloudflare URL sends `X-Robots-Tag: noindex, nofollow`.
+The app is explicitly **development only**. Email/password signup works, but email verification and password reset are not configured. Google sign-in code is present but inactive until a Google OAuth client is registered and `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` are set in Convex. The callback is `https://colorless-toad-83.convex.site/api/auth/callback/google`. Search Console, GA4, Business Profile, email delivery, ChatGPT OAuth and publishing integrations are disconnected. No private Yabi data was imported and no production site was changed. The Cloudflare URL sends `X-Robots-Tag: noindex, nofollow`.
+
+The public audit checks DNS before fetching, but its HTTPS fetch can resolve DNS again. A production rollout needs network-level egress controls or DNS pinning to close that rebinding gap. Keep this deployment for development only.
+
+An opt-in Convex cron dispatches daily, read-only public audits for enabled sites. The Automations page shows the next and last run. The MCP endpoint at `https://colorless-toad-83.convex.site/mcp` serves eight tools to clients with a 30-day, revocable workspace token generated in Settings. It accepts Bearer tokens, enforces workspace boundaries and does not publish changes. ChatGPT connection is **not** online because OAuth discovery and authorization are not configured for that host.
+
+The legacy database currently contains one real account, one Yabi site, and two completed audits, with no saved briefs, keywords, competitors, opportunities or tasks. Those records remain in the legacy database. Linking them to a new Convex account requires a verified identity; do not attach them based only on an unverified email/password signup.
 
 To work locally, install dependencies, set `VITE_CONVEX_URL` and `CONVEX_DEPLOYMENT` for your own Convex dev deployment, run `npx convex dev`, then `npm run dev:independent`. `npm run build:independent` produces `dist-independent`, deployed with `npx wrangler deploy --config cloudflare/wrangler.dev.jsonc`. The existing Lovable/TanStack app remains available through the original `npm run dev` and `npm run build` scripts.
 
-Checks: `npx tsc --noEmit`, `npm test`, `npm run build:independent`, and `node --env-file=.env.local scripts/dev-smoke.mjs`. The smoke script creates disposable dev accounts, tests tenant isolation and persistent CRUD, and performs a real public audit of yabilocation.com; it must only be run against a development deployment.
+Checks: `npx tsc --noEmit`, `npm test`, `npm run build:independent`, `node --env-file=.env.local scripts/dev-smoke.mjs`, `node --env-file=.env.local scripts/scheduled-smoke.mjs`, and `node --env-file=.env.local scripts/mcp-smoke.mjs`. These smoke scripts create disposable dev accounts, test tenant isolation and persistent CRUD, and perform real public audits of yabilocation.com; run them only against a development deployment.
 
 The original product prompt is preserved below for reference.
 
