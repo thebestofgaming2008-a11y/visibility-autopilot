@@ -1065,7 +1065,7 @@ export function CompetitorsPage() {
 const providers = [
   [
     "Google Search Console",
-    "Register an OAuth app in Google Cloud, configure a secure callback and request read-only Search Console scope. Verify property access before enabling data.",
+    "Connect Google Search Console in Lovable with only the read-only Search Console scope, then link it to this project. Data appears after this app verifies access to the site's property.",
   ],
   [
     "Google Analytics 4",
@@ -1097,8 +1097,8 @@ export function IntegrationsPage() {
       description="Provider access remains disconnected until authenticated and verified."
     >
       <Notice>
-        Register provider clients and secure server-side credentials before enabling OAuth. Never
-        paste secrets into chat or a content field.
+        Set up provider access through secure connectors or server-side credentials. Never paste
+        secrets into chat or a content field.
       </Notice>
       <div className="grid gap-3 md:grid-cols-2">
         {providers.map(([name, steps]) => (
@@ -1112,7 +1112,17 @@ export function IntegrationsPage() {
               </span>
             </div>
             <p className="mt-2 text-sm text-muted-foreground">{steps}</p>
-            <p className="mt-2 text-xs">Setup pending · no credentials configured</p>
+            {name === "Google Search Console" && (
+              <a
+                href="https://lovable.dev/dashboard?connectors"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-block text-sm text-accent-foreground underline"
+              >
+                Open secure connector setup
+              </a>
+            )}
+            <p className="mt-2 text-xs">App connection pending · no verified data</p>
           </Panel>
         ))}
       </div>
