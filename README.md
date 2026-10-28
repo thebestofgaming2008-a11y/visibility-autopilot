@@ -42,3 +42,9 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+## Current implementation
+
+The authenticated dashboard now has all 11 navigation pages. Site facts, audits, opportunities, tasks, content briefs, keywords, competitors, workspace mode, jobs and change events use the existing Supabase tables. Public audits run through the authenticated server function and record real results or explicit failures. Provider OAuth, scheduled runs and remote MCP remain pending; their pages show that status rather than simulated connections.
+
+Run `npx tsc --noEmit`, `npm test`, and `npm run build` before publishing. The audit tests cover URL and IP blocking, redirect boundaries, robots rules and evidence evaluation. A live public fetch of yabilocation.com succeeded on 28 October 2026, but a saved end-to-end audit requires a confirmed application test account. Never use production client credentials for that test.

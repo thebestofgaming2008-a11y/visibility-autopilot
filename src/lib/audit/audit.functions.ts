@@ -6,7 +6,7 @@ import { evaluate, impactOf, confidenceOf, type AuditInput } from "./rules";
 
 export const runPublicAudit = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { siteId: string }) => {
+  .validator((input: { siteId: string }) => {
     if (!input?.siteId || !/^[0-9a-f-]{36}$/i.test(input.siteId))
       throw new Error("Invalid site id");
     return input;
