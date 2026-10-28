@@ -1,5 +1,21 @@
 # Visibility Autopilot
 
+## Independent development deployment
+
+The active nonproduction version uses Convex for auth, tenant data and public audit jobs, and Cloudflare Workers for the static React client. It does not require Lovable or Supabase at runtime.
+
+- App: https://omni-visibility-autopilot-dev.thebestofgaming2008.workers.dev
+- Convex dev deployment: https://dashboard.convex.dev/t/monz/visibility-autopilot-dev/colorless-toad-83
+- Branch: `convex-cloudflare-dev` (the original Lovable version remains on `main`)
+
+The app is explicitly **development only**. Email/password signup works, but email verification, password reset and Google sign-in are not configured on the new stack. Search Console, GA4, Business Profile, email delivery, remote MCP and publishing integrations are disconnected. No private Yabi data was imported and no production site was changed. The Cloudflare URL sends `X-Robots-Tag: noindex, nofollow`.
+
+To work locally, install dependencies, set `VITE_CONVEX_URL` and `CONVEX_DEPLOYMENT` for your own Convex dev deployment, run `npx convex dev`, then `npm run dev:independent`. `npm run build:independent` produces `dist-independent`, deployed with `npx wrangler deploy --config cloudflare/wrangler.dev.jsonc`. The existing Lovable/TanStack app remains available through the original `npm run dev` and `npm run build` scripts.
+
+Checks: `npx tsc --noEmit`, `npm test`, `npm run build:independent`, and `node --env-file=.env.local scripts/dev-smoke.mjs`. The smoke script creates disposable dev accounts, tests tenant isolation and persistent CRUD, and performs a real public audit of yabilocation.com; it must only be run against a development deployment.
+
+The original product prompt is preserved below for reference.
+
 Build an actual full-stack web application named "OmniVisibility Autopilot" as an agency-first autonomous organic visibility command center. This is NOT an SEO landing page and NOT a visual-only mock. Implement working persistent CRUD and real public audits. The site yabilocation.com is the initial pilot but no access to its private analytics, code, or deployment is authorized/connected yet. Do not invent live metrics, audit findings, GSC data, ranking positions, connected-account status, or AI search citations. No billing or ads. Do not touch production sites.
 
 USER: a technically inexperienced vibe coder operating a website agency. They will design client websites and want an AI to handle SEO/GEO/AEO, cross-search visibility, performance monitoring and implementation safely. Language English for dashboard; site-specific research French prioritized, Dutch secondary, English tertiary. For Yabi Location, business facts: Belgian monthly COMMERCIAL UTILITY VAN RENTALS, mainly B2B SMEs, tradespeople and self-employed businesses, private clients secondary. Brussels, Vilvoorde and verified commercially relevant places in ~40–50km service area, with arranged handover meeting points, no fixed customer-facing garage; not car/leisure/tourist or daily/weekend rentals, not leasing/finance. Eight vans L1H1/L2H2/L3H2. Do not invent exact price or individual fleet models. Primary contact WhatsApp/phone/form. Every content output must follow factual truthfulness and native FR/NL quality.
@@ -22,9 +38,9 @@ STACK: use Lovable's native full stack default (React/TypeScript/Tailwind/shadcn
 
 User instruction: proceed now to code and implement.
 
-This project was built with [Lovable](https://lovable.dev).
+The initial implementation was built with [Lovable](https://lovable.dev).
 
-## Build with Lovable
+## Historical Lovable implementation
 
 Continue developing this project in the [Lovable editor](https://lovable.dev/projects/c307f1ac-3158-44c2-8f7c-e14c91515bc2).
 
