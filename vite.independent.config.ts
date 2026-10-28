@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  envPrefix: "VITE_CONVEX_URL",
   publicDir: "public-independent",
   build: { outDir: "dist-independent", emptyOutDir: true },
 });
