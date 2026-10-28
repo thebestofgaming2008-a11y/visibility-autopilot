@@ -728,6 +728,7 @@ export type Database = {
           created_at: string
           description: string | null
           effort: number
+          finding_code: string | null
           finding_id: string | null
           id: string
           impact: number
@@ -745,6 +746,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           effort?: number
+          finding_code?: string | null
           finding_id?: string | null
           id?: string
           impact?: number
@@ -762,6 +764,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           effort?: number
+          finding_code?: string | null
           finding_id?: string | null
           id?: string
           impact?: number
