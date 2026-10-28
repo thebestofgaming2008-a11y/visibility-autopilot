@@ -41,6 +41,8 @@ const audits = await client.query(api.workspace.listAudits, { siteId: site.id })
 const pages = await client.query(api.workspace.listAuditPages, { auditId: audit.auditId });
 if (!audits.some((row) => row.id === audit.auditId) || pages.length < 2)
   throw new Error("Audit was not persisted with fetched page evidence");
+if (audit.status !== "completed")
+  throw new Error(`Public audit failed: ${JSON.stringify({ summary: audit.summary, errors: pages.map(page => ({ kind: page.kind, error: page.error })) })}`);
 const outsider = new ConvexHttpClient(url);
 const outsiderSession = await outsider.action(api.auth.signIn, { provider: "password", params: { email: `omni-outsider-${Date.now()}@example.com`, password: randomBytes(24).toString("base64url"), flow: "signUp" } });
 if (!outsiderSession.tokens?.token) throw new Error("Second account creation failed");
@@ -50,4 +52,16 @@ if ((await outsider.query(api.workspace.listSites, {})).some(row => row.id === s
 let denied = false;
 try { await outsider.query(api.workspace.listAudits, { siteId: site.id }); } catch { denied = true; }
 if (!denied) throw new Error("Cross-workspace audit access allowed");
+denied = false;
+try { await outsider.query(api.gsc.status, { siteId: site.id }); } catch { denied = true; }
+if (!denied) throw new Error("Cross-workspace Search Console status access allowed");
+denied = false;
+try { await outsider.query(api.ga4.status, { siteId: site.id }); } catch { denied = true; }
+if (!denied) throw new Error("Cross-workspace Analytics status access allowed");
+denied = false;
+try { await outsider.action(api.gsc.begin, { siteId: site.id }); } catch { denied = true; }
+if (!denied) throw new Error("Cross-workspace Search Console authorization allowed");
+denied = false;
+try { await outsider.action(api.ga4.begin, { siteId: site.id }); } catch { denied = true; }
+if (!denied) throw new Error("Cross-workspace Analytics authorization allowed");
 console.log(JSON.stringify({ signUp: "ok", workspace: "ok", site: site.domain, content: "ok", keywords: "ok", competitors: "ok", activity: "ok", isolation: "ok", scheduling: "ok", audit: audit.status, pages: pages.length, summary: audit.summary }, null, 2));

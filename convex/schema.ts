@@ -62,6 +62,12 @@ export default defineSchema({
   })
     .index("by_token_hash", ["token_hash"])
     .index("by_workspace_id", ["workspace_id"]),
+  legacy_imports: defineTable({
+    email: v.string(),
+    payload: v.any(),
+    claimed_user_id: v.union(v.id("users"), v.null()),
+    claimed_at: v.union(v.string(), v.null()),
+  }).index("by_email", ["email"]),
   audits: defineTable({
     workspace_id: v.id("workspaces"),
     site_id: v.id("sites"),
@@ -154,6 +160,42 @@ export default defineSchema({
   })
     .index("by_workspace_id", ["workspace_id"])
     .index("by_site_id", ["site_id"]),
+  gsc_oauth_states: defineTable({
+    state_hash: v.string(),
+    verifier: v.string(),
+    site_id: v.id("sites"),
+    user_id: v.id("users"),
+    expires_at: v.number(),
+  }).index("by_state_hash", ["state_hash"]),
+  gsc_connections: defineTable({
+    workspace_id: v.id("workspaces"),
+    site_id: v.id("sites"),
+    granted_by: v.id("users"),
+    property: v.string(),
+    permission: v.string(),
+    refresh_token_ciphertext: v.string(),
+    refresh_token_iv: v.string(),
+    verified_at: v.string(),
+    updated_at: v.string(),
+  }).index("by_site_id", ["site_id"]),
+  ga4_oauth_states: defineTable({
+    state_hash: v.string(),
+    verifier: v.string(),
+    site_id: v.id("sites"),
+    user_id: v.id("users"),
+    expires_at: v.number(),
+  }).index("by_state_hash", ["state_hash"]),
+  ga4_connections: defineTable({
+    workspace_id: v.id("workspaces"),
+    site_id: v.id("sites"),
+    granted_by: v.id("users"),
+    property: v.string(),
+    stream_uri: v.string(),
+    refresh_token_ciphertext: v.string(),
+    refresh_token_iv: v.string(),
+    verified_at: v.string(),
+    updated_at: v.string(),
+  }).index("by_site_id", ["site_id"]),
   job_runs: defineTable({
     workspace_id: v.id("workspaces"),
     site_id: v.optional(v.id("sites")),
@@ -202,7 +244,7 @@ export default defineSchema({
     period_start: nullableText,
     period_end: nullableText,
     captured_at: timestamp,
-  }).index("by_site_id", ["site_id"]),
+  }).index("by_site_id", ["site_id"]).index("by_site_id_and_source", ["site_id", "source"]),
   content_briefs: defineTable({
     workspace_id: v.id("workspaces"),
     site_id: v.id("sites"),

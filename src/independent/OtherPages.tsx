@@ -58,15 +58,65 @@ export function CompetitorsPage({ siteId }: SiteContext) {
   return <><div className="panel"><h2>Curated competitor domains</h2><p className="muted">Competitive metrics: Not connected.</p><form key={key} className="form-grid" onSubmit={submit}><label>Domain<input name="domain" placeholder="example.com" required /></label><label>Notes<input name="notes" /></label><button className="primary" disabled={!siteId}>Add competitor</button></form>{error && <p className="error">{error}</p>}</div><div className="panel"><h2>Domains</h2>{rows?.length ? rows.map(row => <div className="finding" key={row.id}><strong>{row.domain}</strong><p className="muted">{row.notes ?? "No notes"}</p></div>) : <p className="muted">No competitors added yet.</p>}</div></>;
 }
 
-export function IntegrationsPage() {
+export function IntegrationsPage({ siteId }: { siteId: Id<"sites"> | null }) {
+  const gsc = useQuery(api.gsc.status, siteId ? { siteId } : "skip");
+  const ga4 = useQuery(api.ga4.status, siteId ? { siteId } : "skip");
+  const begin = useAction(api.gsc.begin);
+  const refresh = useAction(api.gsc.refresh);
+  const disconnect = useAction(api.gsc.disconnect);
+  const beginGa4 = useAction(api.ga4.begin);
+  const refreshGa4 = useAction(api.ga4.refresh);
+  const disconnectGa4 = useAction(api.ga4.disconnect);
+  const [busy, setBusy] = useState(false);
+  const [ga4Busy, setGa4Busy] = useState(false);
+  const [error, setError] = useState(new URLSearchParams(window.location.search).get("gsc") === "failed" ? "Search Console authorization failed. Check Google API access and the Yabi property, then try again." : "");
+  const [ga4Error, setGa4Error] = useState(new URLSearchParams(window.location.search).get("ga4") === "failed" ? "Analytics authorization failed. Check Google API access and the site's web stream, then try again." : "");
+  async function connect() {
+    if (!siteId) return;
+    setBusy(true); setError("");
+    try { window.location.assign(await begin({ siteId })); }
+    catch (reason) { setError((reason as Error).message); setBusy(false); }
+  }
+  async function update() {
+    if (!siteId) return;
+    setBusy(true); setError("");
+    try { await refresh({ siteId }); }
+    catch (reason) { setError((reason as Error).message); }
+    finally { setBusy(false); }
+  }
+  async function remove() {
+    if (!siteId || !window.confirm("Disconnect Search Console from this app? Stored access will be removed. You can separately revoke the Google grant in your Google Account.")) return;
+    setBusy(true); setError("");
+    try { await disconnect({ siteId }); }
+    catch (reason) { setError((reason as Error).message); }
+    finally { setBusy(false); }
+  }
+  async function connectAnalytics() {
+    if (!siteId) return;
+    setGa4Busy(true); setGa4Error("");
+    try { window.location.assign(await beginGa4({ siteId })); }
+    catch (reason) { setGa4Error((reason as Error).message); setGa4Busy(false); }
+  }
+  async function updateAnalytics() {
+    if (!siteId) return;
+    setGa4Busy(true); setGa4Error("");
+    try { await refreshGa4({ siteId }); }
+    catch (reason) { setGa4Error((reason as Error).message); }
+    finally { setGa4Busy(false); }
+  }
+  async function removeAnalytics() {
+    if (!siteId || !window.confirm("Disconnect Analytics from this app? Stored access will be removed. You can separately revoke the Google grant in your Google Account.")) return;
+    setGa4Busy(true); setGa4Error("");
+    try { await disconnectGa4({ siteId }); }
+    catch (reason) { setGa4Error((reason as Error).message); }
+    finally { setGa4Busy(false); }
+  }
   const integrations = [
-    ["Google Search Console", "Create a Google OAuth client, grant read-only Search Console access, then verify a property for this site."],
-    ["Google Analytics 4", "Authorize read-only Analytics access and select a verified property."],
     ["Google Business Profile", "Verify business ownership and authorize the relevant profile before reading it."],
     ["Email delivery", "Connect a verified sender domain before enabling verification and password-reset mail."],
     ["Source repository", "Verify write access before proposing or publishing code changes."],
   ];
-  return <><p className="muted">Setup steps are shown below. None of these connections is active in the Convex development app.</p>{integrations.map(([name, step]) => <div className="panel" key={name}><div className="row space"><h2>{name}</h2><span className="dev-badge">Not connected</span></div><p>{step}</p></div>)}</>;
+  return <><p className="muted">Each data source needs separate read only permission and a verified property or web stream.</p><div className="panel"><div className="row space"><h2>Google Search Console</h2><span className="dev-badge">{gsc?.connected ? "Connected" : "Not connected"}</span></div>{gsc?.connected ? <><p>Verified property: <strong>{gsc.property}</strong> · {gsc.permission}</p><p className="muted">{gsc.capturedAt ? `Latest data: ${new Date(gsc.capturedAt).toLocaleString()} · ${gsc.periodStart} to ${gsc.periodEnd}` : "Connected. Fetch data to show verified search metrics."}</p><div className="row"><button disabled={busy} onClick={() => void update()}>{busy ? "Working…" : "Fetch search data"}</button><button disabled={busy} onClick={() => void remove()}>Disconnect</button></div></> : <><p>Authorize the Google account with access to this site's Search Console property. Only the read-only Search Console scope is requested.</p><button disabled={busy || !siteId} onClick={() => void connect()}>{busy ? "Opening Google…" : "Connect Search Console"}</button></>}{error && <p className="error" role="alert">{error}</p>}</div><div className="panel"><div className="row space"><h2>Google Analytics 4</h2><span className="dev-badge">{ga4?.connected ? "Connected" : "Not connected"}</span></div>{ga4?.connected ? <><p>Matched property: <strong>{ga4.property}</strong> · {ga4.streamUri}</p><p className="muted">{ga4.capturedAt ? `Latest data: ${new Date(ga4.capturedAt).toLocaleString()} · ${ga4.periodStart} to ${ga4.periodEnd}` : "Connected. Fetch data to show verified traffic metrics."}</p><div className="row"><button disabled={ga4Busy} onClick={() => void updateAnalytics()}>{ga4Busy ? "Working…" : "Fetch traffic data"}</button><button disabled={ga4Busy} onClick={() => void removeAnalytics()}>Disconnect</button></div></> : <><p>Authorize read-only Analytics access. The app will match a web data stream to this site's domain before showing traffic data.</p><button disabled={ga4Busy || !siteId} onClick={() => void connectAnalytics()}>{ga4Busy ? "Opening Google…" : "Connect Analytics"}</button></>}{ga4Error && <p className="error" role="alert">{ga4Error}</p>}</div>{integrations.map(([name, step]) => <div className="panel" key={name}><div className="row space"><h2>{name}</h2><span className="dev-badge">Not connected</span></div><p>{step}</p></div>)}</>;
 }
 
 export function AutomationsPage({ workspaceId, siteId }: SiteContext) {
@@ -92,5 +142,5 @@ export function SettingsPage({ workspaceId }: SiteContext) {
   const [newToken, setNewToken] = useState<string | null>(null);
   const [error, setError] = useState("");
   const endpoint = `${String(import.meta.env["VITE_CONVEX_URL"] ?? "").replace(".convex.cloud", ".convex.site")}/mcp`;
-  return <><div className="panel"><h2>Workspace</h2><p>{workspace?.name ?? "Loading…"}</p><p className="muted">Autopilot mode: {workspace?.autopilot_mode ?? "—"}</p></div><div className="panel"><h2>MCP / ChatGPT</h2><p>Secure MCP endpoint for API-token clients: <code>{endpoint}</code></p><p className="muted">Eight tools are online for sites, audits, findings, tasks, job status, and review-only fix proposals. Tokens expire after 30 days and can be revoked here. Direct ChatGPT connection still needs OAuth and is not online.</p><div className="row"><input aria-label="Token label" value={label} onChange={e => setLabel(e.target.value)} maxLength={80} /><button disabled={!workspaceId} onClick={() => workspaceId && void createToken({ workspaceId, label }).then(result => { setNewToken(result.token); setError(""); }).catch(reason => setError((reason as Error).message))}>Create MCP token</button></div>{newToken && <div className="notice"><strong>Copy this token now. It will not be shown again.</strong><p><code style={{ overflowWrap: "anywhere" }}>{newToken}</code></p><button onClick={() => void navigator.clipboard.writeText(newToken).catch(reason => setError((reason as Error).message))}>Copy token</button><button onClick={() => setNewToken(null)}>Done</button></div>}{error && <p className="error">{error}</p>}<h3>Issued tokens</h3>{tokens?.length ? tokens.map(token => <div className="row space finding" key={token.id}><span>{token.label} · {token.revoked_at ? "Revoked" : Date.now() > token.expires_at ? "Expired" : `Expires ${new Date(token.expires_at).toLocaleDateString()}`}</span>{!token.revoked_at && <button onClick={() => void revokeToken({ tokenId: token.id }).catch(reason => setError((reason as Error).message))}>Revoke</button>}</div>) : <p className="muted">No MCP tokens.</p>}</div><div className="panel"><h2>Development authentication</h2><p>Email and password are available for dev accounts. Email verification, password reset, and Google sign in are not configured on Convex yet.</p></div></>;
+  return <><div className="panel"><h2>Workspace</h2><p>{workspace?.name ?? "Loading…"}</p><p className="muted">Autopilot mode: {workspace?.autopilot_mode ?? "—"}</p></div><div className="panel"><h2>MCP / ChatGPT</h2><p>Secure MCP endpoint for API-token clients: <code>{endpoint}</code></p><p className="muted">Eight tools are online for sites, audits, findings, tasks, job status, and review-only fix proposals. Tokens expire after 30 days and can be revoked here. Direct ChatGPT connection still needs OAuth and is not online.</p><div className="row"><input aria-label="Token label" value={label} onChange={e => setLabel(e.target.value)} maxLength={80} /><button disabled={!workspaceId} onClick={() => workspaceId && void createToken({ workspaceId, label }).then(result => { setNewToken(result.token); setError(""); }).catch(reason => setError((reason as Error).message))}>Create MCP token</button></div>{newToken && <div className="notice"><strong>Copy this token now. It will not be shown again.</strong><p><code style={{ overflowWrap: "anywhere" }}>{newToken}</code></p><button onClick={() => void navigator.clipboard.writeText(newToken).catch(reason => setError((reason as Error).message))}>Copy token</button><button onClick={() => setNewToken(null)}>Done</button></div>}{error && <p className="error">{error}</p>}<h3>Issued tokens</h3>{tokens?.length ? tokens.map(token => <div className="row space finding" key={token.id}><span>{token.label} · {token.revoked_at ? "Revoked" : Date.now() > token.expires_at ? "Expired" : `Expires ${new Date(token.expires_at).toLocaleDateString()}`}</span>{!token.revoked_at && <button onClick={() => void revokeToken({ tokenId: token.id }).catch(reason => setError((reason as Error).message))}>Revoke</button>}</div>) : <p className="muted">No MCP tokens.</p>}</div><div className="panel"><h2>Development authentication</h2><p>Google sign in is online for the approved test account. Email and password remain available for dev accounts; email verification and password reset are not configured yet.</p></div></>;
 }

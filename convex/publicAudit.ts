@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { action, internalAction, internalMutation, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { normalizeDomain, safeFetch } from "../src/lib/audit/ssrf";
+import { normalizeDomain } from "../src/lib/audit/ssrf";
 import { parseHtml, parseRobots, parseSitemap, robotsAllows, type RobotsInfo } from "../src/lib/audit/parse";
 import { evaluate, confidenceOf, impactOf, type AuditInput } from "../src/lib/audit/rules";
 
@@ -226,7 +226,7 @@ async function execute(ctx: ActionCtx, started: Started): Promise<{
       const robots: AuditInput["robots"] = { url: `${base}/robots.txt`, status: null, info: null };
       let robotsInfo: RobotsInfo | null = null;
       try {
-        const response = await safeFetch(robots.url, root);
+        const response = await ctx.runAction(internal.publicAuditFetch.fetchPinned, { url: robots.url, allowedRoot: root });
         robots.status = response.status;
         robots.body = response.body.slice(0, 4000);
         if (response.truncated) robots.error = "robots.txt exceeded 2 MB";
@@ -258,7 +258,7 @@ async function execute(ctx: ActionCtx, started: Started): Promise<{
         home.robotsBlocked = true;
       } else {
         try {
-          const response = await safeFetch(home.url, root);
+          const response = await ctx.runAction(internal.publicAuditFetch.fetchPinned, { url: home.url, allowedRoot: root });
           home.url = response.finalUrl;
           home.status = response.status;
           home.chain = response.chain;
@@ -307,7 +307,7 @@ async function execute(ctx: ActionCtx, started: Started): Promise<{
         pages.push({ url: sitemapUrl, kind: "sitemap", error: sitemap.error, fetched_at: now() });
       } else {
         try {
-          const response = await safeFetch(sitemapUrl, root);
+          const response = await ctx.runAction(internal.publicAuditFetch.fetchPinned, { url: sitemapUrl, allowedRoot: root });
           sitemap.status = response.status;
           if (response.truncated) sitemap.error = "Sitemap exceeded 2 MB";
           else if (response.status === 200) Object.assign(sitemap, parseSitemap(response.body));
