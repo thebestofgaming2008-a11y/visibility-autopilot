@@ -14,4 +14,25 @@ describe("App routing", () => {
 
     expect(matches.at(-1)?.routeId).not.toBe(rootRouteId);
   });
+
+  it("resolves every authenticated navigation page", () => {
+    const router = createRouter({ routeTree, context: { queryClient: new QueryClient() } });
+    const pages = [
+      "overview",
+      "sites",
+      "audits",
+      "opportunities",
+      "content",
+      "keywords",
+      "competitors",
+      "integrations",
+      "automations",
+      "activity",
+      "settings",
+    ];
+    for (const page of pages) {
+      const matches = router.matchRoutes(`/${page}`);
+      expect(matches.at(-1)?.routeId, page).toBe(`/_authenticated/${page}`);
+    }
+  });
 });
