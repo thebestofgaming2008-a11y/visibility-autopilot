@@ -23,12 +23,13 @@ export const runPublicAudit = createServerFn({ method: "POST" })
     const ws = site.workspace_id;
 
     // Rate limit: one audit per site per 2 minutes.
-    const { data: recent } = await supabase
+    const { data: recent, error: recentErr } = await supabase
       .from("audits")
       .select("id,created_at,status")
       .eq("site_id", site.id)
       .gte("created_at", new Date(Date.now() - 120_000).toISOString())
       .limit(1);
+    if (recentErr) throw new Error(recentErr.message);
     if (recent && recent.length)
       throw new Error("An audit for this site ran less than 2 minutes ago. Please wait.");
 
@@ -46,7 +47,7 @@ export const runPublicAudit = createServerFn({ method: "POST" })
       })
       .select()
       .single();
-    if (jobErr) throw new Error(jobErr.message);
+    if (jobErr || !job) throw new Error(jobErr?.message ?? "Could not create audit job");
     const { data: audit, error: aErr } = await supabase
       .from("audits")
       .insert({
@@ -58,10 +59,24 @@ export const runPublicAudit = createServerFn({ method: "POST" })
       })
       .select()
       .single();
-    if (aErr) throw new Error(aErr.message);
-    await supabase.from("job_runs").update({ ref_id: audit.id }).eq("id", job.id);
+    if (aErr || !audit) {
+      await supabase
+        .from("job_runs")
+        .update({
+          status: "failed",
+          finished_at: now(),
+          error: aErr?.message ?? "Could not create audit",
+        })
+        .eq("id", job.id);
+      throw new Error(aErr?.message ?? "Could not create audit");
+    }
 
     try {
+      const { error: refErr } = await supabase
+        .from("job_runs")
+        .update({ ref_id: audit.id })
+        .eq("id", job.id);
+      if (refErr) throw new Error(refErr.message);
       const root = normalizeDomain(site.domain);
       const base = `https://${root}`;
       const pages: Record<string, unknown>[] = [];
@@ -181,15 +196,16 @@ export const runPublicAudit = createServerFn({ method: "POST" })
           pages.push({ url: smUrl, kind: "sitemap", error: sitemap.error, fetched_at: now() });
         }
 
-      await supabase
+      const { error: pagesErr } = await supabase
         .from("crawl_pages")
         .insert(pages.map((p) => ({ ...p, workspace_id: ws, audit_id: audit.id })) as never);
+      if (pagesErr) throw new Error(pagesErr.message);
 
       const drafts = evaluate({ siteLanguages: site.languages, home, robots, sitemap });
       const observedAt = now();
       let created = 0;
       for (const d of drafts) {
-        const { data: fnd } = await supabase
+        const { data: fnd, error: findingErr } = await supabase
           .from("findings")
           .insert({
             workspace_id: ws,
@@ -206,8 +222,8 @@ export const runPublicAudit = createServerFn({ method: "POST" })
           })
           .select()
           .single();
-        if (!fnd) continue;
-        await supabase.from("evidence").insert({
+        if (findingErr || !fnd) throw new Error(findingErr?.message ?? "Could not save finding");
+        const { error: evidenceErr } = await supabase.from("evidence").insert({
           workspace_id: ws,
           finding_id: fnd.id,
           url: d.url,
@@ -219,23 +235,26 @@ export const runPublicAudit = createServerFn({ method: "POST" })
             (d.url === home.url ? home.parsed?.snippets["document"] : null) ??
             null,
         });
+        if (evidenceErr) throw new Error(evidenceErr.message);
         if (d.severity === "info") continue;
         // One open opportunity per finding code per site.
-        const { data: open } = await supabase
+        const { data: open, error: openErr } = await supabase
           .from("opportunities")
           .select("id")
           .eq("site_id", site.id)
           .eq("finding_code", d.code)
           .not("status", "in", "(verified,dismissed,rolled_back)")
           .limit(1);
+        if (openErr) throw new Error(openErr.message);
         if (open?.[0]) {
-          await supabase
+          const { error: updateErr } = await supabase
             .from("opportunities")
             .update({ finding_id: fnd.id, updated_at: now() })
             .eq("id", open[0].id);
+          if (updateErr) throw new Error(updateErr.message);
           continue;
         }
-        await supabase.from("opportunities").insert({
+        const { error: opportunityErr } = await supabase.from("opportunities").insert({
           workspace_id: ws,
           site_id: site.id,
           finding_id: fnd.id,
@@ -249,6 +268,7 @@ export const runPublicAudit = createServerFn({ method: "POST" })
           owner: "agency",
           next_action: "Triage: confirm the evidence, then approve or dismiss.",
         });
+        if (opportunityErr) throw new Error(opportunityErr.message);
         created++;
       }
 
@@ -263,7 +283,7 @@ export const runPublicAudit = createServerFn({ method: "POST" })
         failed_checks: failedChecks,
         final_url: home.url,
       };
-      await supabase
+      const { error: auditUpdateErr } = await supabase
         .from("audits")
         .update({
           status,
@@ -274,7 +294,8 @@ export const runPublicAudit = createServerFn({ method: "POST" })
             : null,
         })
         .eq("id", audit.id);
-      await supabase
+      if (auditUpdateErr) throw new Error(auditUpdateErr.message);
+      const { error: jobUpdateErr } = await supabase
         .from("job_runs")
         .update({
           status: status === "failed" ? "failed" : "succeeded",
@@ -282,7 +303,8 @@ export const runPublicAudit = createServerFn({ method: "POST" })
           error: status === "failed" ? "All checks failed" : null,
         })
         .eq("id", job.id);
-      await supabase.from("change_events").insert({
+      if (jobUpdateErr) throw new Error(jobUpdateErr.message);
+      const { error: eventErr } = await supabase.from("change_events").insert({
         workspace_id: ws,
         entity: "audit",
         entity_id: audit.id,
@@ -290,6 +312,7 @@ export const runPublicAudit = createServerFn({ method: "POST" })
         detail: summary,
         actor: userId,
       });
+      if (eventErr) throw new Error(eventErr.message);
       return { auditId: audit.id, status, summary };
     } catch (e) {
       const msg = (e as Error).message;
