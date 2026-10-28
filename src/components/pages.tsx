@@ -454,6 +454,21 @@ export function AuditsPage() {
   const findings = useRows("findings", siteId);
   const [selected, setSelected] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const current = selected ?? audits.data?.[0]?.id;
+  const audit = audits.data?.find((a) => a.id === current);
+  const pages = useQuery({
+    queryKey: ["crawl_pages", current],
+    enabled: !!current,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("crawl_pages")
+        .select("kind, url, http_status, fetched_at, error")
+        .eq("audit_id", current!)
+        .order("fetched_at", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
   const run = useMutation({
     mutationFn: async () => {
       if (!siteId) throw new Error("Select a site first.");
@@ -470,7 +485,16 @@ export function AuditsPage() {
     },
     onError: (e) => setMsg(e.message),
   });
-  const current = selected ?? audits.data?.[0]?.id;
+  const summary =
+    audit?.summary && typeof audit.summary === "object" && !Array.isArray(audit.summary)
+      ? audit.summary
+      : null;
+  const findingCount =
+    summary && typeof summary["findings"] === "number" ? summary["findings"] : null;
+  const opportunityCount =
+    summary && typeof summary["opportunities_created"] === "number"
+      ? summary["opportunities_created"]
+      : null;
   return (
     <Page
       title="Audits"
@@ -502,19 +526,63 @@ export function AuditsPage() {
             ))}
           </State>
         </Panel>
-        <Panel title="Findings and evidence">
-          <State
-            loading={findings.isLoading}
-            error={findings.error}
-            empty={!findings.data?.some((f) => f.audit_id === current)}
-          >
-            {findings.data
-              ?.filter((f) => f.audit_id === current)
-              .map((f) => (
-                <FindingCard key={f.id} finding={f} />
-              ))}
-          </State>
-        </Panel>
+        <div className="space-y-4">
+          <Panel title="Audit result">
+            {!audit ? (
+              <Notice>Select a run to see its checks.</Notice>
+            ) : (
+              <div className="space-y-3 text-sm">
+                <p>
+                  <span className="font-medium capitalize">{audit.status}</span>
+                  {audit.finished_at && (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      · Finished {stamp(audit.finished_at)}
+                    </span>
+                  )}
+                </p>
+                {audit.error && <p className="text-destructive">{audit.error}</p>}
+                {findingCount !== null && (
+                  <p>
+                    {findingCount} {findingCount === 1 ? "finding" : "findings"} ·{" "}
+                    {opportunityCount ?? 0} new{" "}
+                    {opportunityCount === 1 ? "opportunity" : "opportunities"}
+                  </p>
+                )}
+                <State loading={pages.isLoading} error={pages.error} empty={!pages.data?.length}>
+                  <ul className="divide-y border-t">
+                    {pages.data?.map((page) => (
+                      <li key={`${page.kind}-${page.url}`} className="py-2">
+                        <p className="font-medium capitalize">
+                          {page.kind} ·{" "}
+                          {page.http_status ? `HTTP ${page.http_status}` : "Not fetched"}
+                        </p>
+                        <p className="break-all text-xs text-muted-foreground">{page.url}</p>
+                        <p className="text-xs text-muted-foreground">{stamp(page.fetched_at)}</p>
+                        {page.error && <p className="text-xs text-destructive">{page.error}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                </State>
+              </div>
+            )}
+          </Panel>
+          <Panel title="Findings and evidence">
+            <State loading={findings.isLoading} error={findings.error}>
+              {findings.data?.some((f) => f.audit_id === current) ? (
+                findings.data
+                  .filter((f) => f.audit_id === current)
+                  .map((f) => <FindingCard key={f.id} finding={f} />)
+              ) : (
+                <Notice>
+                  {audit?.status === "completed"
+                    ? "No findings from the public checks in this run. This is not a full site or analytics review."
+                    : "No findings recorded for this run."}
+                </Notice>
+              )}
+            </State>
+          </Panel>
+        </div>
       </div>
     </Page>
   );
